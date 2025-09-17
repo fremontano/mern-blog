@@ -1,0 +1,16 @@
+# Node modules
+node_modules/
+
+# Variables de entorno
+.env
+
+# Logs
+*.log
+
+# Build / dist
+dist/
+build/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
