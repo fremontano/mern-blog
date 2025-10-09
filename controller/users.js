@@ -1,7 +1,9 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 import User from '../model/User.js';
 import generateToken from '../utils/generateToken.js';
+import sendEmail from '../utils/sendEmail.js';
 
 const register = async (req, res) => {
   try {
@@ -88,7 +90,14 @@ const login = async (req, res) => {
 const getProfile = async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await User.findById(id).populate('post').select('-password');
+    const user = await User.findById(id).populate({
+      path: 'posts',           // el array de posts del usuario
+      populate: {              // popular la categoría de cada post
+        path: 'category',
+        select: 'name'
+      }
+    })
+      .select('-password');
 
     if (!user) {
       return res.status(404).json({
@@ -113,7 +122,11 @@ const getProfile = async (req, res) => {
 
 const listUsers = async (req, res) => {
   try {
-    const users = await User.find({});
+    const users = await User.find({}).select('-password')
+      .populate({
+        path: 'posts',
+        populate: { path: 'category', select: 'name' },
+      });
 
     if (users.length === 0) {
       return res.status(404).json({
@@ -182,7 +195,6 @@ const blockUser = async (req, res) => {
   }
 };
 
-
 // Desbloquear usuario
 const unBlockUser = async (req, res) => {
   try {
@@ -232,11 +244,230 @@ const unBlockUser = async (req, res) => {
   }
 };
 
+// Quien vio mi Perfil
+const userToViews = async (req, res) => {
+  try {
+    const userProfileId = req.params.userProfileId;
+    const userProfile = await User.findById(userProfileId);
+
+    if (!userProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado',
+      });
+    }
+
+    const currentUserId = req.userAuth._id;
+
+    // Verificar si el usuario ya vio el perfil
+    if (userProfile.profileViewers.includes(currentUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ya has visto este perfil',
+      });
+    }
+
+    // Agregar el ID del usuario actual al perfil visitado
+    userProfile.profileViewers.push(currentUserId);
+    await userProfile.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Perfil visto correctamente',
+      data: userProfile,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+//Seguir a un usuario
+const followingUser = async (req, res) => {
+  try {
+    // El usuario actual autenticado (extraido del token)
+    const currentUserId = req.userAuth._id;
+    // El usuario que queremos seguir (recibido como parametro en la URL)
+    const userToFollowId = req.params.userToFollowId;
+
+    // Evitar que un usuario se siga a si mismo
+    if (currentUserId.toString() === userToFollowId.toString()) {
+      return res.status(400).json({
+        success: false,
+        message: 'El usuario no debe seguirse a sí mismo',
+      });
+    }
+
+    // Agregar al usuario actual el ID del que está siguiendo
+    const updatedCurrentUser = await User.findByIdAndUpdate(currentUserId, {
+      $addToSet: { following: userToFollowId }
+    }, { new: true });
+
+    // Agregar al usuario objetivo el ID del seguidor
+    const updatedFollowedUser = await User.findByIdAndUpdate(currentUserId, {
+      $addToSet: { followers: currentUserId }
+    }, { new: true });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Siguiendo usuario con éxito',
+      updatedCurrentUser,
+      updatedFollowedUser
+
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const unFollowingUser = async (req, res) => {
+  try {
+    const currentUserId = req.userAuth._id;
+    const userToUnFollowId = req.params.userToUnFollowId;
+
+    if (currentUserId.toString() === userToUnFollowId.toString()) {
+      return res.status(400).json({
+        success: false,
+        message: 'No puedes dejar de seguirte a ti mismo',
+      });
+    }
+
+    // Quitar al usuario objetivo del arreglo 'following' del usuario actual
+    const updatedCurrentUser = await User.findByIdAndUpdate(
+      currentUserId,
+      { $pull: { following: userToUnFollowId } },
+      { new: true }
+    );
+
+    // Quitar al usuario actual del arreglo 'followers' del usuario objetivo
+    const updatedFollowedUser = await User.findByIdAndUpdate(
+      userToUnFollowId,
+      { $pull: { followers: currentUserId } },
+      { new: true }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Usuario dejado de seguir con éxito',
+      updatedCurrentUser,
+      updatedFollowedUser
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+// Enviar token 
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const userFound = await User.findOne({ email });
+
+    if (!userFound) {
+      return res.status(400).json({
+        success: false,
+        message: 'El email no está registrado en nuestro sistema',
+      });
+    }
+
+    // Reset Token
+    const resetToken = await userFound.generatePasswordResetToken();
+    await userFound.save();
+
+    // Enviar Email (ahora con nombre y token correctos)
+    await sendEmail(userFound.email, userFound.username, resetToken);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Correo para restablecer la contraseña enviado correctamente',
+      userFound
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+
+
+const resetPassword = async (req, res) => {
+  try {
+    const { resetToken } = req.params;
+    const { password } = req.body;
+
+    // Convertir token recibido a hash (igual que el almacenado)
+    const cryptoToken = crypto
+      .createHash('sha256')
+      .update(resetToken)
+      .digest('hex');
+
+    //Buscar usuario con ese token y verificar que no este vencido
+    const userFound = await User.findOne({
+      passwordResetToken: cryptoToken,
+      passwordResetExpires: { $gt: Date.now() },
+    });
+
+    if (!userFound) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token inválido o expirado.',
+      });
+    }
+
+    // Actualizar Password
+    const salt = await bcrypt.genSalt(10);
+    userFound.password = await bcrypt.hash(password, salt);
+
+    //Limpiar el token para que no se pueda reutilizar
+    userFound.passwordResetToken = undefined;
+    userFound.passwordResetExpires = undefined;
+
+    //Guardar cambios en la base de datos
+    await userFound.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Contraseña actualizada correctamente',
+      userFound
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+
+
+
 export {
   register,
   login,
+  resetPassword,
+  forgotPassword,
   getProfile,
   blockUser,
   listUsers,
-  unBlockUser
+  unBlockUser,
+  userToViews,
+  followingUser,
+  unFollowingUser
 };

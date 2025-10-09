@@ -7,6 +7,9 @@ import commentRouter from '././routes/comment.js';
 import categoryRouter from '././routes/category.js';
 
 import dbConnection from './config/db.js';
+import sendEmail from './utils/sendEmail.js';
+// sendEmail("fremontano24@gmail.com", "Fremontano", "xgfxgsvsgyh");
+
 
 // Middleware
 dotenv.config();

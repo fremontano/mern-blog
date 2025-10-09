@@ -1,4 +1,5 @@
-import mongoose, { Schema } from  'mongoose';
+import mongoose, { Schema } from 'mongoose';
+import crypto from 'crypto';
 
 const userSchema = mongoose.Schema(
   {
@@ -68,16 +69,17 @@ const userSchema = mongoose.Schema(
 
     // Relaciones con otros usuarios
 
-     // Guarda los IDs de los usuarios que han visto el perfils
-    profileViewers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], 
+    // Guarda los IDs de los usuarios que han visto el perfils
+    profileViewers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     // Guarda los IDs de los seguidores
-    followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], 
+    followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     // Guarda los IDs de los usuarios bloqueados
     blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 
     // Relaciones con publicaciones
     // Publicaciones creadas por el usuario, referencia con Post array cantidad de posts
-    post: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Post' }],
+    posts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Post' }],
     // Publicaciones que el usuario ha marcado con "me gusta"
     likedPosts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Post' }],
   },
@@ -86,6 +88,25 @@ const userSchema = mongoose.Schema(
     timestamps: true,
   }
 );
+
+//Generate password,  reset token
+userSchema.methods.generatePasswordResetToken = function () {
+  // Genera un token aleatorio de 20 bytes y lo convierte a formato hexadecimal
+  const resetToken = crypto.randomBytes(20).toString('hex');
+
+  this.passwordResetToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+
+  //asignarse a passwordResetExpires
+  this.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutos
+
+  // Devuelve el token sin cifrar, que se enviará por email
+  return resetToken;
+};
+
+
 
 // Compilamos el esquema en un modelo para poder usarlo en el proyecto
 const User = mongoose.model('User', userSchema);

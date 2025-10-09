@@ -34,7 +34,7 @@ const createPost = async (req, res) => {
  // Asociar Post con el Usuario
     await User.findByIdAndUpdate(
       req.userAuth._id,
-      { $push: { post: post._id } },
+      { $push: { posts: post._id } },
       { new: true }
     );
 
@@ -138,7 +138,7 @@ const updatePost = async (req, res) => {
     return res.status(200).json({
       status: 'success',
       message: 'Post actualizado correctamente',
-      updatePost,
+      updatedPost,
     });
   } catch (error) {
     return res.status(500).json({
