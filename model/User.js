@@ -21,10 +21,10 @@ const userSchema = mongoose.Schema(
     passwordResetExpires: {
       type: Date,
     },
-    accoutVerificationToken: {
+    accountVerificationToken: {
       type: String,
     },
-    accoutVerificationExpires: {
+    accountVerificationExpires: {
       type: Date,
     },
 
@@ -81,7 +81,9 @@ const userSchema = mongoose.Schema(
     // Publicaciones creadas por el usuario, referencia con Post array cantidad de posts
     posts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Post' }],
     // Publicaciones que el usuario ha marcado con "me gusta"
-    likedPosts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Post' }],
+    liked: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Post' }],
+    disliked: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Post' }]
+
   },
   {
     //  Agrega automaticamente los campos createdAt y updatedAt
@@ -89,9 +91,10 @@ const userSchema = mongoose.Schema(
   }
 );
 
-//Generate password,  reset token
+//  MÉTODOS 
+
+//Generar token para resetear contraseña
 userSchema.methods.generatePasswordResetToken = function () {
-  // Genera un token aleatorio de 20 bytes y lo convierte a formato hexadecimal
   const resetToken = crypto.randomBytes(20).toString('hex');
 
   this.passwordResetToken = crypto
@@ -99,14 +102,24 @@ userSchema.methods.generatePasswordResetToken = function () {
     .update(resetToken)
     .digest('hex');
 
-  //asignarse a passwordResetExpires
-  this.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutos
+  this.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 min
 
-  // Devuelve el token sin cifrar, que se enviará por email
   return resetToken;
 };
 
+//Generar token para verificar cuenta
+userSchema.methods.generateAccountVerificationToken = function () {
+  const token = crypto.randomBytes(20).toString('hex');
 
+  this.accountVerificationToken = crypto
+    .createHash('sha256')
+    .update(token)
+    .digest('hex');
+
+  this.accountVerificationExpires = Date.now() + 10 * 60 * 1000; // 10 min
+
+  return token;
+};
 
 // Compilamos el esquema en un modelo para poder usarlo en el proyecto
 const User = mongoose.model('User', userSchema);

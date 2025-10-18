@@ -1,6 +1,6 @@
 import express from 'express';
 import isLogging from '../middleware/isLoggin.js';
-import { blockUser, followingUser, forgotPassword, getProfile, listUsers, login, register, resetPassword, unBlockUser, unFollowingUser, userToViews } from '../controller/users.js';
+import { accountVerificationEmail, blockUser, followingUser, forgotPassword, getProfile, listUsers, login, register, resetPassword, unBlockUser, unFollowingUser, userToViews, verifyAccountEmail } from '../controller/users.js';
 
 const router = express.Router();
 
@@ -8,8 +8,10 @@ const router = express.Router();
 router.post('/register', register);
 router.post('/login', login);
 router.post('/forgot-password', forgotPassword);
-router.post('/reset-password/:resetToken',resetPassword );
+router.post('/reset-password/:resetToken', resetPassword);
 router.get('/profile/:id', isLogging, getProfile);
+router.put('/account-verification', isLogging, accountVerificationEmail);
+router.get('/account-verification/:verifyToken', verifyAccountEmail);
 router.get('/', listUsers);
 router.put('/block/:userIdBlock', isLogging, blockUser);
 router.put('/unblock/:userIdUnblock', isLogging, unBlockUser);

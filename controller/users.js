@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import User from '../model/User.js';
 import generateToken from '../utils/generateToken.js';
 import sendEmail from '../utils/sendEmail.js';
+import sendAccountVerificationTokenEmail from '../utils/sendEmailAccount.js';
 
 const register = async (req, res) => {
   try {
@@ -382,7 +383,7 @@ const forgotPassword = async (req, res) => {
     }
 
     // Reset Token
-    const resetToken = await userFound.generatePasswordResetToken();
+    const resetToken = await userFound.generateAccountVerificationToken();
     await userFound.save();
 
     // Enviar Email (ahora con nombre y token correctos)
@@ -401,8 +402,6 @@ const forgotPassword = async (req, res) => {
     });
   }
 };
-
-
 
 
 const resetPassword = async (req, res) => {
@@ -455,6 +454,71 @@ const resetPassword = async (req, res) => {
 };
 
 
+//Enviar correo de verificación
+const accountVerificationEmail = async (req, res) => {
+  try {
+    const foundUser = await User.findById(req.userAuth._id);
+    if (!foundUser) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Usuario no encontrado.' });
+    }
+
+    const token = foundUser.generateAccountVerificationToken();
+    await foundUser.save();
+
+    // 👇 Aquí asegúrate que la función reciba el link completo
+    const verifyURL = `http://localhost:8082/api/v1/users/account-verification-email/${token}`;
+    await sendAccountVerificationTokenEmail(
+      foundUser.email,
+      foundUser.username,
+      verifyURL
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Correo de verificación enviado correctamente.',
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+//Verificar cuenta por token
+const verifyAccountEmail = async (req, res) => {
+  try {
+    const { verifyToken } = req.params;
+
+    const cryptoToken = crypto
+      .createHash('sha256')
+      .update(verifyToken)
+      .digest('hex');
+
+    const user = await User.findOne({
+      accountVerificationToken: cryptoToken,
+      accountVerificationExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Error al verificar la cuenta: token inválido o expirado.',
+      });
+    }
+
+    user.isVerified = true;
+    user.accountVerificationToken = undefined;
+    user.accountVerificationExpires = undefined;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Cuenta verificada correctamente.',
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 
 
@@ -463,6 +527,8 @@ export {
   login,
   resetPassword,
   forgotPassword,
+  verifyAccountEmail,
+  accountVerificationEmail,
   getProfile,
   blockUser,
   listUsers,

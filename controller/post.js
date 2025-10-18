@@ -13,7 +13,7 @@ const createPost = async (req, res) => {
       });
     }
 
-    // Verificar si ya existe un post con ese título
+    // Verificar si ya existe un post con ese titulo
     const postFound = await Post.findOne({ title });
     if (postFound) {
       return res.status(400).json({
@@ -31,7 +31,7 @@ const createPost = async (req, res) => {
     });
 
     // Asociar Post con el Usuario
- // Asociar Post con el Usuario
+    // Asociar Post con el Usuario
     await User.findByIdAndUpdate(
       req.userAuth._id,
       { $push: { posts: post._id } },
@@ -187,10 +187,127 @@ const deletePost = async (req, res) => {
   }
 };
 
+
+const likePost = async (req, res) => {
+  try {
+    const { id } = req.params; // ID del post
+    const userId = req.userAuth._id; // ID del usuario que da like
+
+    const post = await Post.findById(id);
+    if (!post) {
+      return res.status(404).json({ status: 'fail', message: 'Post no encontrado' });
+    }
+
+    // Inicializar arrays si son undefined
+    post.like = post.like || [];
+    post.disLike = post.disLike || [];
+
+    // Verificar si el usuario ya dio like
+    const userHasLiked = post.like.some(like => like.toString() === userId.toString());
+    if (userHasLiked) {
+      return res.status(400).json({ status: 'fail', message: 'Ya has dado like a este post' });
+    }
+
+    // Agregar like
+    post.like.push(userId);
+
+    // Si estaba en dislikes, eliminarlo
+    post.disLike = post.disLike.filter(dislike => dislike.toString() !== userId.toString());
+
+    // Guardar cambios
+    await post.save();
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Post likeado correctamente',
+      post,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 'error',
+      message: error.message,
+    });
+  }
+};
+
+
+const dislikePost = async (req, res) => {
+  try {
+    const { id } = req.params; // ID del post
+    const userId = req.userAuth._id; // ID del usuario que da dislike
+
+    const post = await Post.findById(id);
+    if (!post) {
+      return res.status(404).json({ status: 'fail', message: 'Post no encontrado' });
+    }
+
+    // Verificar si el usuario ya dio dislike
+    const userHasDisliked = post.disLike.some(dislike => dislike.toString() === userId.toString());
+    if (userHasDisliked) {
+      return res.status(400).json({ status: 'fail', message: 'Ya has dado dislike a este post' });
+    }
+
+    // Agregar dislike
+    post.disLike.push(userId);
+
+    // Si estaba en likes, eliminarlo
+    post.like = post.like.filter(like => like.toString() !== userId.toString());
+
+    // Guardar cambios
+    await post.save();
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Post marcado con dislike correctamente',
+      post,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 'error',
+      message: error.message,
+    });
+  }
+};
+
+
+const claps = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Buscar el post
+    const post = await Post.findById(id);
+    if (!post) {
+      return res.status(404).json({ status: 'fail', message: 'Post no encontrado' });
+    }
+
+    // Incrementar claps
+    const updatedPost = await Post.findOneAndUpdate(
+      { _id: id },
+      { $inc: { claps: 1 } },
+      { new: true } // devuelve el documento actualizado
+    );
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Se sumó un clap al post',
+      post: updatedPost
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+
 export {
   createPost,
   getPosts,
   getPostById,
   updatePost,
-  deletePost
+  deletePost,
+  likePost,
+  dislikePost,
+  claps
 };
