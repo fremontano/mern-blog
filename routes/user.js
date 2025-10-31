@@ -1,12 +1,15 @@
 import express from 'express';
 import isLogging from '../middleware/isLoggin.js';
-import { accountVerificationEmail, blockUser, followingUser, forgotPassword, getProfile, listUsers, login, register, resetPassword, unBlockUser, unFollowingUser, userToViews, verifyAccountEmail } from '../controller/users.js';
+import { accountVerificationEmail, blockUser, followingUser, forgotPassword, getFeedPosts, getProfile, listUsers, login, register, resetPassword, unBlockUser, unFollowingUser, userToViews, verifyAccountEmail } from '../controller/users.js';
+
+import upload from '../middleware/multer.js';
 
 const router = express.Router();
 
 // Definimos la rutas 
-router.post('/register', register);
+router.post('/register', upload.single('profilePicture'), register);
 router.post('/login', login);
+router.get('/feed', isLogging, getFeedPosts);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password/:resetToken', resetPassword);
 router.get('/profile/:id', isLogging, getProfile);

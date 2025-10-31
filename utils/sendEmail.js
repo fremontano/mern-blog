@@ -67,8 +67,6 @@ const sendEmail = async (to, username, resetToken = null) => {
       text,
       html,
     });
-
-    console.log('Correo enviado: ', info.messageId);
     return info;
 
   } catch (error) {

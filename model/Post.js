@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose, { VirtualType } from 'mongoose';
 
 const PostSchema = mongoose.Schema(
   {
@@ -49,6 +49,8 @@ const PostSchema = mongoose.Schema(
   },
   {
     timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 

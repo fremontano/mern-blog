@@ -2,25 +2,46 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
 import User from '../model/User.js';
+import Post from '../model/Post.js';
 import generateToken from '../utils/generateToken.js';
 import sendEmail from '../utils/sendEmail.js';
 import sendAccountVerificationTokenEmail from '../utils/sendEmailAccount.js';
+import cloudinary from '../utils/cloudinary.js';
+
 
 const register = async (req, res) => {
   try {
+
     const { username, email, password } = req.body;
 
+    console.log('Body:', req.body);
+    console.log('File:', req.file);
+    console.log('Files:', req.files);
+
     const user = await User.findOne({ username });
+
     if (user) {
       return res
         .status(400)
         .json({ status: 'fail', message: 'El usuario ya existe' });
     }
 
+    let profilePicture = '';
+    if (req.file) {
+      // Subir a Cloudinary
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: 'upload_post',
+      });
+
+      profilePicture = result.secure_url;
+    }
+
     const newUser = new User({
       username,
       email,
       password,
+      profilePicture
+
     });
 
     const salt = await bcrypt.genSalt(10);
@@ -35,7 +56,7 @@ const register = async (req, res) => {
       // username: newUser.username,
       // email: newUser.email,
       // role: newUser.role,
-      newUser,
+      newUser
     });
   } catch (error) {
     return res.status(500).json({
@@ -520,6 +541,49 @@ const verifyAccountEmail = async (req, res) => {
   }
 };
 
+const getFeedPosts = async (req, res) => {
+  try {
+    const userId = req.userAuth._id;
+    const currentTime = new Date();
+
+    // Buscar usuarios que han bloqueado al usuario logeado
+    const usersBlockingLoggedInUser = await User.find({
+      blockedUsers: userId,
+    });
+
+    // IDs de usuarios que bloquearon al logeado
+    const blockingUserIds = usersBlockingLoggedInUser.map(user => user._id);
+
+    // Query para posts: excluir autores que bloquearon al usuario logeado
+    const query = {
+      author: { $nin: blockingUserIds },
+      $or: [
+        { shedduledPublished: { $lte: currentTime } }, // publicados hasta ahora
+        { shedduledPublished: null } // posts sin fecha programada
+      ]
+    };
+
+    // Obtener posts y popular relaciones
+    const posts = await Post.find(query)
+      .populate('author', 'username email')
+      .populate('category', 'name')
+      .populate('comments')
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      status: 'success',
+      data: posts,
+    });
+
+  } catch (error) {
+    console.error('Error al obtener feed:', error);
+    return res.status(500).json({
+      status: 'error',
+      message: error.message,
+    });
+  }
+};
+
 
 
 export {
@@ -535,5 +599,6 @@ export {
   unBlockUser,
   userToViews,
   followingUser,
-  unFollowingUser
+  unFollowingUser,
+  getFeedPosts
 };

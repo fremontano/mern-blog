@@ -1,9 +1,28 @@
+import cloudinary from '../utils/cloudinary.js';
 import Post from '../model/Post.js';
 import User from '../model/User.js';
 import Category from '../model/Category.js';
 
+
 const createPost = async (req, res) => {
   try {
+    // Validar archivo
+    if (!req.file) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Debe subir una imagen',
+      });
+    }
+
+    // Subir a Cloudinary
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      folder: 'upload_post',
+    });
+
+    // Eliminar archivo temporal del servidor
+    // fs.unlinkSync(req.file.path);
+
+    // Datos del body
     const { title, content, categoryId } = req.body;
 
     if (!title || !content || !categoryId) {
@@ -13,7 +32,6 @@ const createPost = async (req, res) => {
       });
     }
 
-    // Verificar si ya existe un post con ese titulo
     const postFound = await Post.findOne({ title });
     if (postFound) {
       return res.status(400).json({
@@ -22,23 +40,24 @@ const createPost = async (req, res) => {
       });
     }
 
-    // Crear el post
+    // Crear post con URL de Cloudinary
     const post = await Post.create({
       title,
       content,
       category: categoryId,
       author: req.userAuth._id,
+      image: result.secure_url, //Se guarda la URL de la imagen
+      localPath: req.file.path, // guarda la ruta local
     });
 
-    // Asociar Post con el Usuario
-    // Asociar Post con el Usuario
+    // Asociar con usuario
     await User.findByIdAndUpdate(
       req.userAuth._id,
       { $push: { posts: post._id } },
       { new: true }
     );
 
-    // Asociar Post con la Categoría
+    // Asociar con categoría
     await Category.findByIdAndUpdate(
       categoryId,
       { $push: { posts: post._id } },
@@ -56,12 +75,14 @@ const createPost = async (req, res) => {
       data: populatedPost,
     });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({
       status: 'error',
       message: error.message,
     });
   }
 };
+
 
 const getPosts = async (req, res) => {
   try {
@@ -110,6 +131,7 @@ const updatePost = async (req, res) => {
   try {
     const { id } = req.params;
     const { title, content, categoryId } = req.body;
+
     // Buscar el post por ID
     const post = await Post.findById(id);
 
@@ -126,6 +148,23 @@ const updatePost = async (req, res) => {
         status: 'fail',
         message: 'No tienes permiso para actualizar este post',
       });
+    }
+
+    //Si subieron nuevo archivo
+    if (req.file) {
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: 'upload_post',
+      });
+
+      // Eliminar la imagen anterior si existe
+      if (post.image && post.image.includes('cloudinary.com')) {
+        const publicId = post.image.split('/').slice(-1)[0].split('.')[0];
+        await cloudinary.uploader.destroy(`upload_post/${publicId}`);
+      }
+
+      // Actualizar URL de imagen
+      post.image = result.secure_url;
+
     }
 
     // Actualizar campos
@@ -301,6 +340,57 @@ const claps = async (req, res) => {
 };
 
 
+const schedule = async (req, res) => {
+  try {
+    const { schedulePublish } = req.body;
+    const { postId } = req.params;
+
+    // Validar que vengan los campos
+    if (!postId || !schedulePublish) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Los campos postId y schedulePublish son requeridos'
+      });
+    }
+
+    // Buscar el post
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ status: 'fail', message: 'Post no encontrado' });
+    }
+
+    // Verificar que el usuario sea el autor
+    if (post.author.toString() !== req.userAuth._id.toString()) {
+      return res.status(403).json({ status: 'fail', message: 'No tienes permiso para programar este post' });
+    }
+
+    // Validar que la fecha de publicación sea futura
+    const scheduleDate = new Date(schedulePublish);
+    const currentDate = new Date();
+    if (scheduleDate < currentDate) {
+      return res.status(400).json({ status: 'fail', message: 'La fecha de publicación debe ser futura' });
+    }
+
+    // Guardar la fecha programada
+    post.shedduledPublished = scheduleDate;
+    await post.save();
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Post programado correctamente',
+      post
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+
+
 export {
   createPost,
   getPosts,
@@ -309,5 +399,6 @@ export {
   deletePost,
   likePost,
   dislikePost,
-  claps
+  claps,
+  schedule
 };
